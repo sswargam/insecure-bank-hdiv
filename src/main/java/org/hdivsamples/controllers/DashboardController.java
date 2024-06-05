@@ -10,11 +10,22 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.URL;
+import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.Principal;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
 import java.util.List;
 
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.DESKeySpec;
+import javax.crypto.spec.SecretKeySpec;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.IOUtils;
@@ -154,7 +165,7 @@ public class DashboardController {
 	@RequestMapping(value = "/userDetail/newcertificate", method = RequestMethod.POST)
 	@ResponseBody
 	public String processSimple(@RequestParam(value = "file", required = false) final MultipartFile file, final Model model)
-			throws IOException, ClassNotFoundException, NoSuchAlgorithmException {
+			throws Exception {
 		File tmpFile = File.createTempFile("serial", ".ser");
 		file.transferTo(tmpFile);
 
@@ -214,8 +225,33 @@ public class DashboardController {
 		}
 
 	}
+	
+	private static byte [] getCipher(byte [] data) throws IllegalBlockSizeException, BadPaddingException, NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, InvalidKeySpecException {
+		Cipher cipher = Cipher.getInstance("DES");
+		
+		byte[] keyBytes = {
+			    0x01, 0x23, 0x45, 0x67, (byte) 0x89, (byte) 0xAB, (byte) (Math.random()*0xCD), (byte) 0xEF
+			};
+		
+	    // Create a DES key specification
+	    KeySpec keySpec = new DESKeySpec(keyBytes);
 
-	private static String getFileChecksum(final MessageDigest digest, final File file) throws IOException {
+	    // Create a SecretKeyFactory for DES
+	    SecretKeyFactory keyFactory = SecretKeyFactory.getInstance("DES");
+
+	    // Generate a SecretKey object
+	    SecretKey secretKey = keyFactory.generateSecret(keySpec);
+
+	    // Create a SecretKeySpec object from the SecretKey
+	    SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getEncoded(), "DES");
+
+
+		
+		cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec);
+		return cipher.doFinal(data);
+	}
+
+	private static String getFileChecksum(final MessageDigest digest, final File file) throws Exception {
 		// Get file input stream for reading the file content
 		FileInputStream fis = new FileInputStream(file);
 
@@ -232,7 +268,7 @@ public class DashboardController {
 		fis.close();
 
 		// Get the hash's bytes
-		byte[] bytes = digest.digest();
+		byte[] bytes = getCipher(digest.digest());
 
 		// This bytes[] has bytes in decimal format;
 		// Convert it to hexadecimal format
